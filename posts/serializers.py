@@ -11,15 +11,19 @@ class PostSerializer(serializers.ModelSerializer):
     love_count = serializers.SerializerMethodField()
     funny_count = serializers.SerializerMethodField()
     angry_count = serializers.SerializerMethodField()
+    loved_users = serializers.SerializerMethodField()
+    funny_users = serializers.SerializerMethodField()
+    angry_users = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
             'id', 'user', 'title', 'description', 'created_at', 'updated_at',
             'like_count', 'is_liked', 'dislike_count', 'is_disliked',
-            'liked_users','love_count', 'funny_count', 'angry_count'
+            'liked_users','love_count', 'funny_count', 'angry_count','loved_users', 'funny_users', 'angry_users'
         ]
-        read_only_fields = ['user', 'like_count', 'dislike_count', 'is_liked', 'is_disliked', 'liked_users']
+        read_only_fields = ['user', 'like_count', 'dislike_count', 'is_liked', 'is_disliked',
+                            'liked_users', 'loved_users', 'funny_users', 'angry_users']
 
     def get_like_count(self, obj):
         return obj.likes.count()
@@ -49,29 +53,41 @@ class PostSerializer(serializers.ModelSerializer):
 
     def get_liked_users(self, obj):
         return [user.username for user in obj.likes.all()]
+    
+    def get_loved_users(self, obj):
+        return [user.username for user in obj.loves.all()]
+
+    def get_funny_users(self, obj):
+        return [user.username for user in obj.funnies.all()]
+
+    def get_angry_users(self, obj):
+        return [user.username for user in obj.angries.all()]    
 
 
 
 class CommentSerializer(serializers.ModelSerializer):
-    replies = serializers.SerializerMethodField() # Returns all replies to a comment    
-    comment_content = serializers.PrimaryKeyRelatedField(source='parent', queryset=Comment.objects.all(), required=False,allow_null=True)
+    #post = serializers.PrimaryKeyRelatedField(queryset=Post.objects.all())
+    replies = serializers.SerializerMethodField()
+    comment_content = serializers.PrimaryKeyRelatedField(
+        source='parent',
+        queryset=Comment.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    post_title = serializers.CharField(source='post.title', read_only=True)
+
 
     class Meta:
         model = Comment
-        fields = ['id', 'post', 'content', 'created_at', 'comment_content', 'replies']
-        
+        fields = ['id', 'post','post_title', 'content', 'created_at', 'comment_content', 'replies']
 
-    def get_replies(self, obj): #This is a recursive serializer that fetches all replies for a comment.
+    def get_replies(self, obj):
         return CommentSerializer(obj.replies.all(), many=True, context=self.context).data
-    
-    
-    
+
     def validate(self, data):
-      
-        comment_content = data.get("comment_content")
+        comment_content = data.get("parent")
         post = data.get("post")
         if comment_content and comment_content.post != post:
-            raise serializers.ValidationError("comment_content comment must be on the same post.")
+            raise serializers.ValidationError("Reply must be on the same post.")
         return data
-
     
