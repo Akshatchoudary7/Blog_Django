@@ -79,7 +79,7 @@ WSGI_APPLICATION = 'fbPost.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'Django_DB',
+        'NAME': 'test_db',
         'USER': 'root',
         'PASSWORD': 'admin',
         'HOST': 'localhost',
