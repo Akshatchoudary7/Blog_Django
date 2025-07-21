@@ -1,9 +1,9 @@
 from rest_framework import viewsets, status, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import Post, Comment
-from rest_framework.authtoken.models import Token
+from .models import Post, Comment,Reaction
 from .pagination import PostCursorPagination
+from django.db import transaction
 from .serializers import PostSerializer, CommentSerializer
 
 class PostViewSet(viewsets.ModelViewSet):
@@ -22,60 +22,33 @@ class PostViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    @transaction.atomic
     def react(self, request, pk=None):
         post = self.get_object()
         user = request.user
-        reaction_type = request.data.get('type')  # like, love, funny, angry
+        reaction_type = request.data.get('type')
 
-    # First remove user from all reactions
-        post.likes.remove(user)
-        post.loves.remove(user)
-        post.funnies.remove(user)
-        post.angries.remove(user)
+        if reaction_type not in dict(Reaction.ReactionType.choices):
+            return Response({'detail': 'Invalid reaction type.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Add user to selected reaction
-        if reaction_type == 'like':
-            post.likes.add(user)
-        elif reaction_type == 'love':
-            post.loves.add(user)
-        elif reaction_type == 'funny':
-            post.funnies.add(user)
-        elif reaction_type == 'angry':
-            post.angries.add(user)
-        else:
-            return Response({"detail": "Invalid reaction type."}, status=400)
+        Reaction.objects.update_or_create(
+            user=user,
+            post=post,
+            defaults={'reaction_type': reaction_type}
+        )
 
-        return Response({
-            "reaction": reaction_type,
-            "like_count": post.likes.count(),
-            "love_count": post.loves.count(),
-            "funny_count": post.funnies.count(),
-            "angry_count": post.angries.count()
-        })
+        return Response({'status': 'success', 'reaction': reaction_type})
 
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
-    def dislike(self, request, pk=None):
+    @action(detail=True, methods=['get'], permission_classes=[permissions.AllowAny])
+    def reactions(self, request, pk=None):
         post = self.get_object()
-        user = request.user
-
-        if post.dislikes.filter(id=user.id).exists():
-            return Response({'detail': 'You have already disliked this post.'}, status=status.HTTP_400_BAD_REQUEST)
-
-     
-        post.likes.remove(user)
-
-        post.dislikes.add(user)
-        return Response({
-            'status': 'disliked',
-            'dislike_count': post.dislikes.count(),
-            'like_count': post.likes.count(),
-            'is_disliked': True,
-            'is_liked': False
-        }, status=status.HTTP_200_OK)
+        counts = Reaction.objects.filter(post=post).values('reaction_type').annotate(count=Count('id'))
+        return Response({c['reaction_type']: c['count'] for c in counts})
 
 class CommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommentSerializer 
     pagination_class = None 
+   
     #If you pass ?post=3, it filters comments for post ID 3.
     def get_queryset(self):
         post_id = self.request.GET.get('post') 
@@ -85,4 +58,22 @@ class CommentViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def toggle_like(self, request, pk=None):
+        comment = self.get_object()
+        user = request.user
 
+        if comment.likes.filter(id=user.id).exists():
+            comment.likes.remove(user)
+            return Response({
+                'status': 'unliked',
+                'like_count': comment.likes.count(),
+                'is_liked': False
+            })
+        else:
+            comment.likes.add(user)
+            return Response({
+                'status': 'liked',
+                'like_count': comment.likes.count(),
+                'is_liked': True
+            })

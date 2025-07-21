@@ -14,7 +14,7 @@
 - POST	     /api/posts/{id}/dislike/	 Dislike the post (only once)
 
 # Search Posts
-
+    
 Method	       URL	                                             
 - GET	       /api/posts/?search={title or description}  
 

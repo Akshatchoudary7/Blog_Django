@@ -1,37 +1,37 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils.translation import gettext_lazy as _
 
-
-class Post(models.Model):     
-    user = models.ForeignKey(User, on_delete=models.CASCADE) 
+class Post(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
-    description = models.TextField() 
+    description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    likes = models.ManyToManyField(User, related_name='liked_posts', blank=True)
-    dislikes = models.ManyToManyField(User, related_name='disliked_posts', blank=True)
-    loves = models.ManyToManyField(User, related_name='loved_posts', blank=True)
-    funnies = models.ManyToManyField(User, related_name='funny_posts', blank=True)
-    angries = models.ManyToManyField(User, related_name='angry_posts', blank=True)
 
+    def __str__(self):
+        return self.title
 
-    def __str__(self):  
-        return self.title 
+class Reaction(models.Model):
+    class ReactionType(models.TextChoices):
+        LIKE = 'like', _('1. Like')
+        DISLIKE = 'dislike', _('2. Dislike')
+        LOVE = 'love', _('3. Love')
+        FUNNY = 'funny', _('4. Funny')
+        SAD = 'sad', _('5. Sad')
+        SHOCK = 'shock', _('6. Shock')
 
-    def total_likes(self):  #Returns how many users have liked the post.
-        return self.likes.count()
-    
-    def total_dislikes(self):
-        return self.dislikes.count()
-    
-    def total_loves(self):
-        return self.loves.count()
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    post = models.ForeignKey(Post, related_name='reactions', on_delete=models.CASCADE)
+    reaction_type = models.CharField(max_length=10, choices=ReactionType.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
 
-    def total_funnies(self):
-        return self.funnies.count()
+    class Meta:
+        unique_together = ('user', 'post')  # Only one reaction per user per post
 
-    def total_angries(self):
-        return self.angries.count()
+    def __str__(self):
+        return f"{self.user.username} reacted with {self.reaction_type} to {self.post.title}"
+
 
 class Comment(models.Model):  
     user = models.ForeignKey(User, on_delete=models.CASCADE)   #Concept: Self-referential relationship
@@ -39,10 +39,13 @@ class Comment(models.Model):
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     parent = models.ForeignKey('self', null=True, blank=True, related_name='replies', on_delete=models.CASCADE)   #Concept: Self-referential relationship
-
+    likes = models.ManyToManyField(User, related_name='liked_comments', blank=True)
+    
     def __str__(self):
         return self.content[:30]
 
     def is_reply(self):
         return self.parent is not None
 
+    def total_likes(self):
+        return self.likes.count()
